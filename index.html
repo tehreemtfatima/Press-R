@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Face Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #canvas-wrapper canvas {
+      display: block;
+    }
+
+    .controls {
+      position: fixed;
+      bottom: 1.2rem;
+      right: 1.2rem;
+      display: flex;
+      flex-direction: row;
+      gap: 0.6rem;
+    }
+
+    button {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: #fff;
+      border: none;
+      border-radius: 0;
+      padding: 0.4rem 0.75rem;
+      cursor: pointer;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      opacity: 0.55;
+      transition: opacity 0.2s, color 0.25s, border-color 0.25s;
+    }
+
+    button .key-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border: 1.5px solid currentColor;
+      border-radius: 4px;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 0.8rem;
+      font-weight: bold;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    button .key-box.pressed {
+      background: currentColor;
+      color: inherit;
+    }
+
+    button .key-box.pressed-invert {
+      /* letter becomes bg color when filled */
+      filter: invert(1);
+    }
+
+    button .btn-label {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    button:hover { opacity: 1; }
+
+    /* light background state */
+    button.light-mode {
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="canvas-wrapper"></div>
+
+  <div class="controls">
+    <button id="btn-generate">
+      <span class="key-box">R</span>
+      <span class="btn-label">Generate</span>
+    </button>
+    <button id="btn-save">
+      <span class="key-box">S</span>
+      <span class="btn-label">Save</span>
+    </button>
+  </div>
+
+  <script>
+    let baseWidth  = 1920;
+    let baseHeight = 1080;
+
+    let eyeSize, eyeShape;
+    let mouthHeight, noseWidth, noseHeight, noseType;
+    let rectWidth = 100;
+    let eyebrowWidth, eyebrowHeight, eyebrowAngle, eyebrowOffset;
+    let eyeDistance = 1300;
+    let mouthWidth;
+    let rectCount = 5;
+    let isInverted = false;
+
+    function updateButtonTheme() {
+      const buttons = document.querySelectorAll('button');
+      buttons.forEach(btn => {
+        if (isInverted) {
+          // dark background → white buttons
+          btn.classList.remove('light-mode');
+        } else {
+          // light background → black buttons
+          btn.classList.add('light-mode');
+        }
+      });
+    }
+
+    function setup() {
+      let cnv = createCanvas(windowWidth, windowHeight);
+      cnv.parent('canvas-wrapper');
+      generateFace();
+    }
+
+    function draw() {
+      let scaleX = windowWidth  / baseWidth;
+      let scaleY = windowHeight / baseHeight;
+      let s = min(scaleX, scaleY);
+
+      let offsetX = (windowWidth  - baseWidth  * s) / 2;
+      let offsetY = (windowHeight - baseHeight * s) / 2;
+      translate(offsetX, offsetY);
+      scale(s);
+
+      let bgColor = isInverted ? 0 : 255;
+      let fgColor = isInverted ? 255 : 0;
+
+      background(bgColor);
+      noStroke();
+
+      let centerX  = baseWidth / 2;
+      let eyeY     = baseHeight * 0.3;
+      let noseY    = baseHeight * 0.4;
+      let mouthY   = baseHeight * 0.7;
+      let eyebrowY = eyeY - eyebrowOffset;
+
+      let leftEyeX  = centerX - eyeDistance / 2;
+      let rightEyeX = centerX + eyeDistance / 2;
+
+      fill(fgColor);
+
+      // EYEBROWS
+      rectMode(CENTER);
+      push(); translate(leftEyeX,  eyebrowY); rotate( eyebrowAngle); rect(0, 0, eyebrowWidth, eyebrowHeight); pop();
+      push(); translate(rightEyeX, eyebrowY); rotate(-eyebrowAngle); rect(0, 0, eyebrowWidth, eyebrowHeight); pop();
+      rectMode(CORNER);
+
+      // EYES
+      drawEye(leftEyeX,  eyeY, eyeSize, fgColor);
+      drawEye(rightEyeX, eyeY, eyeSize, fgColor);
+
+      // NOSE
+      let noseTop    = noseY - noseHeight / 2;
+      let noseBottom = noseY + noseHeight / 2;
+      fill(fgColor);
+
+      if (noseType === "rect") {
+        rect(centerX - noseWidth/2, noseTop, noseWidth, noseHeight);
+      } else if (noseType === "triangle") {
+        triangle(centerX, noseTop, centerX - noseWidth/2, noseBottom, centerX + noseWidth/2, noseBottom);
+      } else if (noseType === "inverted") {
+        triangle(centerX - noseWidth/2, noseTop, centerX + noseWidth/2, noseTop, centerX, noseBottom);
+      }
+
+      // MOUTH
+      let mouthRadius  = mouthHeight * 0.2;
+      let borderInset  = -1;
+      fill(fgColor);
+      rect(centerX - mouthWidth/2, mouthY, mouthWidth, mouthHeight, mouthRadius);
+
+      // TEETH
+      fill(bgColor);
+      let innerMouthX      = centerX - mouthWidth/2 + borderInset;
+      let innerMouthY      = mouthY + borderInset;
+      let innerMouthWidth  = mouthWidth - borderInset*2;
+      let innerMouthHeight = mouthHeight - borderInset*2;
+      rectMode(CENTER);
+      let spacing     = innerMouthWidth / rectCount;
+      let rectCenterY = innerMouthY + innerMouthHeight / 2;
+      for (let i = 0; i < rectCount; i++) {
+        let rectCenterX = innerMouthX + spacing * i + spacing / 2;
+        rect(rectCenterX, rectCenterY, rectWidth, innerMouthHeight);
+      }
+      rectMode(CORNER);
+    }
+
+    function drawEye(x, y, size, color) {
+      fill(color);
+      if (eyeShape === "circle") {
+        circle(x, y, size);
+      } else if (eyeShape === "rounded") {
+        rectMode(CENTER); rect(x, y, size, size, size * 0.4); rectMode(CORNER);
+      } else if (eyeShape === "square") {
+        rectMode(CENTER); rect(x, y, size, size); rectMode(CORNER);
+      }
+    }
+
+    function generateFace() {
+      eyeSize       = random(20, 500);
+      eyeShape      = random(["circle", "rounded", "square"]);
+      mouthHeight   = random(100, 250);
+      mouthWidth    = random(800, 1800);
+      noseWidth     = random(100, 200);
+      noseHeight    = random(220, 500);
+      noseType      = random(["rect", "triangle", "inverted"]);
+      rectWidth     = random(10, 50);
+      eyebrowWidth  = random(200, 500);
+      eyebrowHeight = random(5, 40);
+      eyebrowOffset = 220;
+      eyebrowAngle  = random(-PI/20, PI/20);
+      isInverted    = random() > 0.5;
+      updateButtonTheme();
+    }
+
+    function flashKey(id) {
+      const box = document.querySelector(`#${id} .key-box`);
+      box.style.background = 'currentColor';
+      box.style.filter = 'invert(1)';
+      setTimeout(() => {
+        box.style.background = '';
+        box.style.filter = '';
+      }, 200);
+    }
+
+    function keyPressed() {
+      if (key === 'r' || key === 'R') { flashKey('btn-generate'); generateFace(); }
+      if (key === 's' || key === 'S') { flashKey('btn-save'); saveCanvas('generated-face', 'png'); }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    document.getElementById('btn-generate').addEventListener('click', () => { flashKey('btn-generate'); generateFace(); });
+    document.getElementById('btn-save').addEventListener('click',     () => { flashKey('btn-save'); saveCanvas('generated-face', 'png'); });
+  </script>
+</body>
+</html>
